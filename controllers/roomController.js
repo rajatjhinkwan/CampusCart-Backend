@@ -88,6 +88,78 @@ exports.getAllRooms = async (req, res) => {
     });
 };
 
+/* ------------------------------------------------
+   FILTER ROOMS (Advanced Filters)
+------------------------------------------------- */
+exports.filterRooms = async (req, res) => {
+    const {
+        q,
+        city,
+        minPrice,
+        maxPrice,
+        roomType,
+        furnished,
+        bhk,
+        sort = "createdAt_desc",
+        page = 1,
+        limit = 20
+    } = req.query;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    let filter = {};
+
+    // Text search
+    if (q) {
+        filter.$or = [
+            { title: { $regex: q, $options: "i" } },
+            { description: { $regex: q, $options: "i" } }
+        ];
+    }
+
+    // Location filter
+    if (city) filter["location.city"] = { $regex: city, $options: "i" };
+
+    // Room type filter
+    if (roomType) filter.roomType = roomType;
+
+    // Furnished filter
+    if (furnished) filter.furnished = furnished;
+
+    // BHK filter
+    if (bhk) filter.bhk = Number(bhk);
+
+    // Price filter
+    if (minPrice || maxPrice) {
+        filter.rent = {};
+        if (minPrice) filter.rent.$gte = Number(minPrice);
+        if (maxPrice) filter.rent.$lte = Number(maxPrice);
+    }
+
+    // Sorting
+    const sortOptions = {};
+    const [sortField, sortOrder] = sort.split("_");
+    sortOptions[sortField] = sortOrder === "asc" ? 1 : -1;
+
+    // Fetch data
+    const rooms = await Room.find(filter)
+        .populate("seller", "name email")
+        .sort(sortOptions)
+        .skip((page - 1) * limit)
+        .limit(limit);
+
+    const total = await Room.countDocuments(filter);
+
+    res.json({
+        success: true,
+        total,
+        page,
+        limit,
+        data: rooms
+    });
+};
+
 
 /* ------------------------------------------------
    SEARCH ROOMS (title + description)

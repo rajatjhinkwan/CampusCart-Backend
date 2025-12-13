@@ -19,7 +19,7 @@ const cookieParser = require('cookie-parser');
 
 // Importing custom files
 const { connectDB } = require('./config/db'); // function to connect MongoDB
-const chatSocket = require('./sockets/chatSocket'); // socket setup function
+const sockets = require('./sockets');
 const { apiLimiter } = require('./middleware/rateLimitMiddleware'); // rate limiter
 const errorMiddleware = require('./middleware/errorMiddleware');
 
@@ -34,7 +34,7 @@ const server = http.createServer(app);
 // If PORT isn’t found in .env, we set a default value.
 
 if (!process.env.PORT) {
-  console.warn('⚠️  Warning: PORT is not set in .env — defaulting to 5000');
+  console.warn('⚠️  Warning: PORT is not set in .env — defaulting to 5001');
 }
 
 const PORT = process.env.PORT || 5000;
@@ -66,7 +66,59 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // Middlewares are like security guards and translators that handle requests before routes.
 // These improve security, handle data, and compress responses.
 
-app.use(helmet()); // adds security headers
+// CORS MUST be applied FIRST, before other middlewares
+// Setup CORS (cross-origin resource sharing)
+// The CORS middleware automatically handles OPTIONS preflight requests
+// In development, allow all localhost origins; in production, use strict list
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // In development, allow all localhost origins
+    if (NODE_ENV === 'development') {
+      if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        console.log(`✅ CORS allowing origin: ${origin}`);
+        return callback(null, true);
+      }
+    }
+    
+    // Check environment variable for allowed origins
+    const envOrigins = (process.env.CORS_ORIGINS || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    
+    if (envOrigins.length > 0 && envOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Default allowed origins for development
+    const defaultOrigins = ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174'];
+    if (defaultOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    console.log(`⚠️  CORS blocked origin: ${origin}`);
+    callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Authorization'],
+  preflightContinue: false,
+};
+
+app.use(cors(corsOptions));
+
+// Security headers (configured to work with CORS)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false
+})); // adds security headers
 app.use(hpp()); // protects against HTTP parameter pollution
 app.use(compression()); // compresses responses for faster delivery
 app.use(express.json({ limit: '10mb' })); // parses JSON with size limit
@@ -80,21 +132,13 @@ if (NODE_ENV === 'development') {
   // app.use(morganMiddleware);
 }
 
-// Setup CORS (cross-origin resource sharing)
-const allowedOrigins = (process.env.CORS_ORIGINS || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
-
-const corsOptions = {
-  origin: allowedOrigins.length ? allowedOrigins : true,
-  credentials: true,
-  optionsSuccessStatus: 200,
-};
-app.use(cors(corsOptions));
-
-// Apply custom rate limiter to prevent spam/attacks
-app.use(apiLimiter);
+// Apply custom rate limiter AFTER CORS (but skip for OPTIONS requests)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return next(); // Skip rate limiting for preflight requests
+  }
+  apiLimiter(req, res, next);
+});
 
 // Serve static uploaded files safely
 app.use('/public/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
@@ -109,6 +153,15 @@ app.use('/public/uploads', express.static(path.join(__dirname, 'public', 'upload
 app.get('/', (req, res) => {
   console.log("EVERYTHING FINE : YOU ARE A GOOD BACKEND DEVELOPER");
   res.send("EVERYTHING FINE : YOU ARE A GOOD BACKEND DEVELOPER");
+});
+
+// CORS test endpoint
+app.get('/api/cors-test', (req, res) => {
+  res.json({ 
+    message: 'CORS is working!', 
+    origin: req.headers.origin,
+    timestamp: new Date().toISOString()
+  });
 });
 
 
@@ -144,25 +197,29 @@ app.use(errorMiddleware);
 const { Server } = require('socket.io');
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins.length ? allowedOrigins : true,
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (NODE_ENV === 'development') {
+        if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+          return callback(null, true);
+        }
+      }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },
   pingTimeout: 60000, // disconnect idle sockets after 60s
 });
 
-// Attach socket handlers (chat, notifications, etc.)
-try {
-  if (typeof chatSocket === 'function') { // module.exports = function(io) { ... }
-    chatSocket(io);
-  } else if (chatSocket?.default && typeof chatSocket.default === 'function') { // export default function(io) { ... }
-    chatSocket.default(io);
-  } else {
-    console.warn('⚠️ chatSocket export is not a function. Please export a function that accepts io.');
-  }
-} catch (err) {
-  console.error('❌ Failed to initialize sockets:', err);
-}
+// Initialize socket namespaces and handlers
+sockets.init(io);
+
+// Make io available in controllers via req.app.get('io')
+app.set('io', io);
 
 
 

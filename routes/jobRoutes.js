@@ -12,6 +12,9 @@ router.post("/", auth.protect, upload.array('images', 6), handleAsync(jobControl
 // Get all jobs
 router.get("/", handleAsync(jobController.getAllJobs));
 
+// Filter jobs (advanced filters)
+router.get("/filter", handleAsync(jobController.filterJobs));
+
 // Get single job
 router.get("/:id", handleAsync(jobController.getJobById));
 

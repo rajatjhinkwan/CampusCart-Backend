@@ -1,73 +1,88 @@
-// controllers/notificationController.js
 const Notification = require('../models/notificationModel');
 const handleAsync = require('../utils/handleAsync');
 
-// Story: notifications are short letters you store when something important happens.
+function buildLink(type, resourceId) {
+  if (!resourceId) return '';
+  if (type === 'product') return `/product/${resourceId}`;
+  if (type === 'room') return `/rooms/${resourceId}`;
+  if (type === 'service') return `/services/${resourceId}`;
+  if (type === 'job') return `/jobs/${resourceId}`;
+  return '';
+}
 
 exports.createNotification = handleAsync(async (req, res) => {
-  // admin or services call this: { user, title, body, link }
-  const { user, title, body, link, type } = req.body;
-  const n = await Notification.create({ user, title, body, link, type });
-  // push via socket if present
+  const { user, type, event, title, message, resourceId, link, meta } = req.body;
+  const computedLink = link || buildLink(type, resourceId);
+  const n = await Notification.create({ user, type, event, title, message, resourceId, link: computedLink, meta });
   const io = req.app.get('io');
   if (io) io.to(user.toString()).emit('notification', n);
   res.status(201).json(n);
 });
 
 exports.getMyNotifications = handleAsync(async (req, res) => {
-  const items = await Notification.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(100);
+  const { status, type, q: search } = req.query;
+  const query = { user: req.user.id };
+  if (status === 'unread') query.isRead = false;
+  if (status === 'read') query.isRead = true;
+  if (type) query.type = type;
+  if (search && search.trim()) {
+    const regex = new RegExp(search.trim(), 'i');
+    query.$or = [{ title: regex }, { message: regex }];
+  }
+  const items = await Notification.find(query).sort({ createdAt: -1 }).limit(200);
   res.json(items);
 });
 
-exports.markAllRead = handleAsync(async (req, res) => {
-  await Notification.updateMany({ user: req.user.id, read: false }, { read: true });
-  res.json({ message: 'All marked read' });
+exports.getNotificationById = handleAsync(async (req, res) => {
+  const item = await Notification.findOne({ _id: req.params.notificationId, user: req.user.id });
+  if (!item) return res.status(404).json({ message: 'Not found' });
+  res.json(item);
 });
 
-// Mark a single notification as read
-exports.markOneRead = async (req, res) => {
-  const userId = req.user._id; // comes from auth middleware
-  const { notificationId } = req.params;
+exports.markAllRead = handleAsync(async (req, res) => {
+  await Notification.updateMany({ user: req.user.id, isRead: false }, { isRead: true });
+  res.json({ success: true });
+});
 
-  // Step 1️⃣: Check if the notification exists and belongs to this user
-  const notification = await Notification.findOne({
-    _id: notificationId,
-    user: userId,
-  });
+exports.markOneRead = handleAsync(async (req, res) => {
+  const updated = await Notification.findOneAndUpdate(
+    { _id: req.params.notificationId, user: req.user.id },
+    { isRead: true },
+    { new: true }
+  );
+  if (!updated) return res.status(404).json({ message: 'Not found' });
+  res.json(updated);
+});
 
-  if (!notification) {
-    return res.status(404).json({ message: "Notification not found" });
-  }
+exports.toggleRead = handleAsync(async (req, res) => {
+  const item = await Notification.findOne({ _id: req.params.notificationId, user: req.user.id });
+  if (!item) return res.status(404).json({ message: 'Not found' });
+  item.isRead = !item.isRead;
+  await item.save();
+  res.json(item);
+});
 
-  // Step 2️⃣: Mark as read
-  notification.isRead = true;
-  await notification.save();
+exports.deleteNotification = handleAsync(async (req, res) => {
+  const del = await Notification.findOneAndDelete({ _id: req.params.notificationId, user: req.user.id });
+  if (!del) return res.status(404).json({ message: 'Not found' });
+  res.json({ success: true });
+});
 
-  // Step 3️⃣: Send response
-  res.status(200).json({
-    message: "✅ Notification marked as read",
-    notification,
-  });
-};
-
-
-
-// implement markAllRead
-
+exports.clearAllNotifications = handleAsync(async (req, res) => {
+  await Notification.deleteMany({ user: req.user.id });
+  res.json({ success: true });
+});
 
 exports.sendTestNotification = handleAsync(async (req, res) => {
-  const userId = req.user?._id; // safe access
-
-  // FIX: Safe handling of req.body
-  const notification = req.body?.notification
-    || `${new Date().toISOString()} - This is a test notification`;
-
-  const testNotification = await Notification.create({
+  const userId = req.user?._id;
+  const nowText = req.body?.notification || `${new Date().toISOString()}`;
+  const n = await Notification.create({
     user: userId,
-    type: "message",
-    message: notification,
-    link: "/test-link",
+    type: 'system',
+    event: 'general',
+    title: 'Test Notification',
+    message: nowText,
+    link: '',
   });
-
-  res.status(201).json(testNotification);
+  res.status(201).json(n);
 });

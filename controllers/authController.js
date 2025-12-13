@@ -31,8 +31,8 @@ exports.signup = handleAsync(async (req, res) => {
   const user = await User.create({ name, email, password, role });
   console.log("🟢 User created successfully:", user._id);
 
-  // 4️⃣ Generate access token
-  const accessToken = generateToken(user._id);
+  // 4️⃣ Generate access token - pass user object, not just ID
+  const accessToken = generateToken(user);
   console.log("🟢 Access token generated");
 
   // 5️⃣ Generate refresh token
@@ -85,7 +85,7 @@ exports.login = handleAsync(async (req, res) => {
   }
 
   // 2️⃣ Check if user exists
-  const user = await User.findOne({ email }).select("+password");
+  const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
   if (!user) {
     console.log("🔴 No user found for email:", email);
     return res.status(401).json({ message: "User not found" });
@@ -100,15 +100,15 @@ exports.login = handleAsync(async (req, res) => {
 
   console.log("🟢 User authenticated successfully:", user._id);
 
-  // 4️⃣ Generate access token (short-lived)
-  const accessToken = generateToken(user._id);
+  // 4️⃣ Generate access token (short-lived) - pass user object, not just ID
+  const accessToken = generateToken(user);
   console.log("🟢 Access token generated:", accessToken.slice(0, 25) + "...");
 
   // 5️⃣ Generate refresh token (long-lived)
   const jwt = require("jsonwebtoken");
   const refreshToken = jwt.sign(
     { id: user._id },
-    process.env.JWT_REFRESH_SECRET,
+    process.env.JWT_SECRET || 'dev-secret',
     { expiresIn: "7d" } // valid for 7 days
   );
   console.log("🟢 Refresh token generated:", refreshToken.slice(0, 25) + "...");
@@ -143,13 +143,15 @@ exports.login = handleAsync(async (req, res) => {
 
 
 exports.getProfile = handleAsync(async (req, res) => {
-  // req.user set by auth middleware
-  const user = await User.findById(req.user.id).select('-password');
+  // req.user set by auth middleware - check both id and _id
+  const userId = req.user._id || req.user.id;
+  const user = await User.findById(userId).select('-password');
   if (!user) return res.status(404).json({ message: 'User not found' });
   res.json(user);
 });
 
 exports.updateProfile = handleAsync(async (req, res) => {
+  const userId = req.user._id || req.user.id;
   const updates = (({ name, bio, phone }) => ({ name, bio, phone }))(req.body);
   // allow image upload as req.file or req.files
   if (req.file || (req.files && req.files.avatar)) {
@@ -160,7 +162,7 @@ exports.updateProfile = handleAsync(async (req, res) => {
     updates.avatar = { url: secure_url, public_id };
   }
 
-  const user = await User.findByIdAndUpdate(req.user.id, updates, { new: true }).select('-password');
+  const user = await User.findByIdAndUpdate(userId, updates, { new: true }).select('-password');
   res.json(user);
 });
 
@@ -193,30 +195,42 @@ exports.logout = handleAsync(async (req, res) => {
 // ==================================================
 exports.refreshToken = async (req, res) => {
   try {
-    const { token } = req.body;
-    console.log("🟡 Received refresh token from client:", token);
+    // Support both body token and cookie token
+    const token = req.body?.token || req.cookies?.refreshToken;
+    console.log("🟡 Received refresh token from client");
 
     if (!token) {
       console.log("🔴 No token provided");
       return res.status(401).json({ message: "No refresh token provided" });
     }
 
-    const savedToken = await Token.findOne({ token, purpose: 'refreshToken' });
-    console.log("🟢 Token found in DB:", savedToken);
+    // Verify token first
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+      console.log("🟢 Token decoded successfully");
+    } catch (err) {
+      console.log("🔴 Token verification failed:", err.message);
+      return res.status(403).json({ message: "Invalid or expired refresh token" });
+    }
 
+    // Check if token exists in DB (optional but recommended)
+    const savedToken = await Token.findOne({ token, purpose: 'refreshToken' });
     if (!savedToken) {
       console.log("🔴 Token not found in database");
       return res.status(403).json({ message: "Invalid refresh token" });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
-    console.log("🟢 Token decoded successfully:", decoded);
+    // Get user to generate proper token
+    const userId = decoded.id || decoded.sub;
+    const user = await User.findById(userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
-    const newAccessToken = jwt.sign(
-      { id: decoded.id },
-      process.env.JWT_SECRET,
-      { expiresIn: "15m" }
-    );
+    // Generate new access token using generateToken utility
+    const { generateToken } = require('../utils/generateToken');
+    const newAccessToken = generateToken(user);
 
     console.log("✅ New access token generated!");
     res.json({ accessToken: newAccessToken });
@@ -232,7 +246,7 @@ exports.refreshToken = async (req, res) => {
 // ==================================================
 exports.forgotPassword = handleAsync(async (req, res) => {
   const { email } = req.body;
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email: email.toLowerCase() });
   if (!user) return res.status(404).json({ message: "User not found" });
 
   // Generate reset token

@@ -1,14 +1,13 @@
-// sockets/socketAuth.js
-const jwt = require("jsonwebtoken");
+// socket/socketAuth.js
+const jwt = require('jsonwebtoken');
+const User = require('../models/userModel');
 
-function verifyTokenFromSocket(token) {
+exports.verifyTokenFromSocket = (token) => {
   if (!token) return null;
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    return decoded; // expected to include user id etc.
-  } catch (err) {
+    return { id: decoded.id }; // minimal info – you could attach name/avatar if you like
+  } catch (_) {
     return null;
   }
-}
-
-module.exports = { verifyTokenFromSocket };
+};

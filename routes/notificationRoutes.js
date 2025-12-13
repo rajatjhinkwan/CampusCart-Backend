@@ -8,11 +8,12 @@ const handleAsync = require('../utils/handleAsync');
 // 🚀 NOTIFICATION ROUTES
 // =========================
 
-// get notifications for logged-in user
 router.get('/', protect, handleAsync(notificationController.getMyNotifications));
+router.get('/:notificationId', protect, handleAsync(notificationController.getNotificationById));
 
 // mark one notification as read
 router.patch('/:notificationId/read', protect, handleAsync(notificationController.markOneRead));
+router.patch('/:notificationId/toggle', protect, handleAsync(notificationController.toggleRead));
 
 // mark all notifications as read
 router.patch('/mark-all-read', protect, handleAsync(notificationController.markAllRead));

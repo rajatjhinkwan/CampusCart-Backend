@@ -17,6 +17,7 @@ router.use("/reports", require("./reportRoutes"));
 router.use("/rooms", require("./roomRoutes"));  // ✅ Correct
 router.use("/services", require("./serviceRoutes"));
 router.use("/jobs", require("./jobRoutes"));
+router.use("/rides", require("./rideRoutes"));
 
 
 

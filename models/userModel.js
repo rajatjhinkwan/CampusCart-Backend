@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
 
-    email: { type: String, required: true, unique: true },
+    email: { type: String, required: true, unique: true, lowercase: true },
 
     password: {
       type: String,
@@ -17,6 +17,12 @@ const userSchema = new mongoose.Schema(
     avatar: { type: String, default: "" }, // Cloudinary URL
 
     phone: { type: String },
+
+    username: { type: String, trim: true },
+
+    bio: { type: String, default: "" },
+
+    location: { type: String, default: "" },
 
     role: {
       type: String,
@@ -64,7 +70,39 @@ const userSchema = new mongoose.Schema(
     // 🔎 Saved searches that store product results
     savedSearches: [
       { type: mongoose.Schema.Types.ObjectId, ref: "Product" }
-    ]
+    ],
+
+    // ⚙️ User settings stored in a single object
+    settings: {
+      notifications: {
+        newMessage: { type: Boolean, default: true },
+        productSold: { type: Boolean, default: true },
+        priceDrop: { type: Boolean, default: false },
+        newOffer: { type: Boolean, default: true },
+        appUpdates: { type: Boolean, default: false },
+      },
+      privacy: {
+        profileVisible: { type: Boolean, default: true },
+        activityStatus: { type: Boolean, default: true },
+        searchEngineListing: { type: Boolean, default: false },
+        dataDownload: { type: Boolean, default: false },
+        personalizedAds: { type: Boolean, default: true },
+      },
+      preferences: {
+        darkMode: { type: Boolean, default: false },
+        compactView: { type: Boolean, default: false },
+        autoPlayVideos: { type: Boolean, default: true },
+        language: { type: String, default: "English" },
+      },
+      selling: {
+        autoRenewListings: { type: Boolean, default: true },
+        enableOfferRequests: { type: Boolean, default: true },
+        promoteListings: { type: Boolean, default: false },
+      },
+      security: {
+        twoFactorEnabled: { type: Boolean, default: false },
+      },
+    }
   },
   { timestamps: true }
 );

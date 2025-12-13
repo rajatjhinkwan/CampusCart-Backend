@@ -1,6 +1,7 @@
 // sockets/index.js
 const chatSocket = require('./chatSocket');
 const notificationSocket = require('./notificationSocket');
+const rideSocket = require('./rideSocket');
 
 let ioInstance = null;
 
@@ -20,6 +21,7 @@ function init(io) {
   // mount specialized handlers
   chatSocket.register(io);
   notificationSocket.register(io);
+  rideSocket.register(io);
 }
 
 /**

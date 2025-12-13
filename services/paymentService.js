@@ -7,9 +7,10 @@
  * - Also provides a small helper to create payment intents if you prefer custom flows.
  */
 
-const Stripe = require('stripe');
+let Stripe = null;
+try { Stripe = require('stripe'); } catch (_) { Stripe = null; }
 
-const stripe = process.env.STRIPE_SECRET_KEY ? Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const stripe = Stripe && process.env.STRIPE_SECRET_KEY ? Stripe(process.env.STRIPE_SECRET_KEY) : null;
 if (!stripe) console.warn('[paymentService] STRIPE_SECRET_KEY missing in .env');
 
 const { STRIPE_WEBHOOK_SECRET } = process.env;
@@ -53,6 +54,9 @@ async function createPaymentIntent({ amountCents, currency = 'inr', metadata = {
 
 /** Verify webhook signature & return event */
 function constructStripeEvent(rawBody, signatureHeader) {
+  if (!stripe) {
+    throw new Error('Stripe not configured');
+  }
   if (!STRIPE_WEBHOOK_SECRET) {
     throw new Error('Stripe webhook secret is not set');
   }

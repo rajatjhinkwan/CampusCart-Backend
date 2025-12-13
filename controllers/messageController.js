@@ -78,7 +78,7 @@ exports.sendMessage = handleAsync(async (req, res) => {
 
   const io = req.app.get("io");
   if (io)
-    io.to(conversation._id.toString()).emit("newMessage", populatedMessage);
+    io.of('/chat').to(`conversation:${conversation._id.toString()}`).emit("newMessage", populatedMessage);
 
   res.status(201).json(populatedMessage);
 });
@@ -121,7 +121,7 @@ exports.markRead = handleAsync(async (req, res) => {
 
   const io = req.app.get("io");
   if (io)
-    io.to(conversationId).emit("messagesRead", { conversationId, userId });
+    io.of('/chat').to(`conversation:${conversationId}`).emit("messagesRead", { conversationId, userId });
 
   res.json({ message: "Messages marked as read" });
 });
@@ -156,8 +156,8 @@ exports.deleteMessage = handleAsync(async (req, res) => {
 
   const io = req.app.get("io");
   if (io)
-    io
-      .to(conversationId.toString())
+    io.of('/chat')
+      .to(`conversation:${conversationId.toString()}`)
       .emit("messageDeleted", { messageId });
 
   res.status(200).json({ message: "Message deleted" });

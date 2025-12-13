@@ -50,8 +50,9 @@ async function protect(req, res, next) {
       return res.status(401).json({ message: "Not authorized, user not found" });
     }
 
-    // 7️⃣ Attach user to request
+    // 7️⃣ Attach user to request (ensure both _id and id are available)
     req.user = user;
+    req.user.id = user._id.toString(); // Ensure id is available for compatibility
 
     // ✅ Continue to next middleware/controller
     next();
@@ -75,7 +76,7 @@ async function refreshProtect(req, res, next) {
     // Verify refresh token
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
     } catch (err) {
       if (err.name === "TokenExpiredError") {
         return res.status(401).json({ message: "Refresh token expired" });
@@ -94,6 +95,7 @@ async function refreshProtect(req, res, next) {
     }
 
     req.user = user;
+    req.user.id = user._id.toString(); // Ensure id is available for compatibility
     next();
   } catch (err) {
     console.log("REFRESH ERROR:", err);

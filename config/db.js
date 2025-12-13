@@ -3,10 +3,6 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 
 const MONGO_URI = process.env.MONGO_URI;
-if (!MONGO_URI) {
-  console.error('MONGO_URI is not set in environment variables.');
-  process.exit(1);
-}
 
 /**
  * Connect to MongoDB with retry/backoff and graceful shutdown.
@@ -22,14 +18,11 @@ async function connectDB({
     attempt++;
     try {
       await mongoose.connect(uri, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-        // optional tuning
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
         family: 4
       });
-      console.log('MongoDB connected.');
+      console.log('✅ MongoDB connected.');
     } catch (err) {
       console.error(`MongoDB connection attempt ${attempt} failed:`, err.message || err);
       if (attempt < maxRetries) {
@@ -38,8 +31,12 @@ async function connectDB({
         await new Promise(res => setTimeout(res, delay));
         return connectWithRetry();
       } else {
-        console.error('Could not connect to MongoDB after retries. Exiting.');
-        process.exit(1);
+        console.error('Could not connect to MongoDB after retries. Booting in-memory MongoDB for dev.');
+        const { MongoMemoryServer } = require('mongodb-memory-server');
+        const mem = await MongoMemoryServer.create();
+        const memUri = mem.getUri();
+        await mongoose.connect(memUri);
+        console.log('✅ Connected to in-memory MongoDB.');
       }
     }
   };
@@ -48,7 +45,7 @@ async function connectDB({
 
   // Connection event listeners
   mongoose.connection.on('connected', () => {
-    console.log('Mongoose connected to DB.');
+    console.log('✅ Mongoose connected to DB.');
   });
 
   mongoose.connection.on('reconnected', () => {

@@ -18,6 +18,11 @@ router.post("/", auth.protect, upload.array('images', 6), handleAsync(serviceCon
 router.get("/", handleAsync(serviceController.getAllServices));
 
 // ----------------------------------
+// FILTER SERVICES (Advanced Filters)
+// ----------------------------------
+router.get("/filter", handleAsync(serviceController.filterServices));
+
+// ----------------------------------
 // GET SINGLE SERVICE
 // ----------------------------------
 router.get("/:id", handleAsync(serviceController.getServiceById));

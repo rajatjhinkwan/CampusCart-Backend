@@ -5,13 +5,15 @@
  * - Fallback: Web Push (sketched; requires keys & subscription endpoint from clients)
  */
 
-const admin = require('firebase-admin');
-const webpush = require('web-push');
+let admin = null;
+let webpush = null;
+try { admin = require('firebase-admin'); } catch (_) { admin = null; }
+try { webpush = require('web-push'); } catch (_) { webpush = null; }
 
 const { FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY_BASE64, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
 
 let fcmInitialized = false;
-if (FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY_BASE64) {
+if (admin && FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY_BASE64) {
   try {
     const privateKey = Buffer.from(FIREBASE_PRIVATE_KEY_BASE64, 'base64').toString('utf8');
     admin.initializeApp({
@@ -29,7 +31,7 @@ if (FIREBASE_PROJECT_ID && FIREBASE_CLIENT_EMAIL && FIREBASE_PRIVATE_KEY_BASE64)
   console.warn('[pushNotificationService] Firebase env vars not set; FCM disabled.');
 }
 
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+if (webpush && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_SUBJECT || 'mailto:admin@example.com', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 } else {
   console.warn('[pushNotificationService] VAPID keys missing — web-push may not work.');
@@ -58,6 +60,9 @@ async function sendFcm({ tokens, title, body, data = {}, android = {}, apns = {}
 
 /** Send Web Push (requires subscription object from client) */
 async function sendWebPush(subscription, payload) {
+  if (!webpush) {
+    return { success: false, error: new Error('Web push not configured') };
+  }
   try {
     const resp = await webpush.sendNotification(subscription, JSON.stringify(payload));
     return { success: true, resp };

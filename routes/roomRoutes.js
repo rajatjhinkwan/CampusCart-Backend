@@ -18,6 +18,11 @@ router.post("/", auth.protect, upload.array('images', 6), handleAsync(roomContro
 // ----------------------------------
 router.get("/", handleAsync(roomController.getAllRooms));
 
+// ----------------------------------
+// FILTER ROOMS (Advanced Filters)
+// ----------------------------------
+router.get("/filter", handleAsync(roomController.filterRooms));
+
 
 // ----------------------------------
 // SEARCH ROOMS
