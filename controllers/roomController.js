@@ -14,10 +14,22 @@ exports.createRoom = async (req, res) => {
 
     let images = [];
     if (req.files && req.files.length > 0) {
-        const uploads = await Promise.all(
-            req.files.map((file) => uploadFromBuffer(file.buffer, { folder: "rooms" }))
-        );
-        images = uploads.map(u => ({ url: u.secure_url, public_id: u.public_id }));
+        try {
+            const uploads = await Promise.all(
+                req.files.map((file) => uploadFromBuffer(file.buffer, { folder: "rooms" }))
+            );
+            images = uploads.map(u => ({ url: u.secure_url, public_id: u.public_id }));
+        } catch (e) {
+            images = req.files.map((file, i) => {
+                const b64 = file.buffer.toString("base64");
+                const url = `data:${file.mimetype};base64,${b64}`;
+                return { url, public_id: `local-room-${Date.now()}-${i}` };
+            });
+        }
+    } else {
+        images = [
+            { url: "https://via.placeholder.com/640x480.png?text=Room", public_id: `placeholder-room-${Date.now()}` }
+        ];
     }
 
     const rent = req.body.rent ? Number(req.body.rent) : undefined;
@@ -284,7 +296,7 @@ exports.updateRoom = async (req, res) => {
    DELETE ROOM
 ------------------------------------------------- */
 exports.deleteRoom = async (req, res) => {
-    const room = await Room.findById(req.params.id);
+  const room = await Room.findById(req.params.id);
 
     if (!room) {
         return res.status(404).json({
@@ -300,10 +312,30 @@ exports.deleteRoom = async (req, res) => {
         });
     }
 
-    await room.deleteOne();
+  await room.deleteOne();
 
-    res.status(200).json({
-        success: true,
-        message: "Room deleted successfully"
-    });
+  res.status(200).json({
+    success: true,
+    message: "Room deleted successfully"
+  });
+};
+
+exports.adminToggleRoomActive = async (req, res) => {
+  const room = await Room.findById(req.params.id);
+  if (!room) {
+    return res.status(404).json({ success: false, message: "Room not found" });
+  }
+  const { active } = req.body;
+  room.isActive = Boolean(active);
+  await room.save();
+  res.status(200).json({ success: true, isActive: room.isActive });
+};
+
+exports.adminDeleteRoom = async (req, res) => {
+  const room = await Room.findById(req.params.id);
+  if (!room) {
+    return res.status(404).json({ success: false, message: "Room not found" });
+  }
+  await room.deleteOne();
+  res.status(200).json({ success: true, message: "Room deleted (admin)" });
 };

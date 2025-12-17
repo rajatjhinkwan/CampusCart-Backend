@@ -75,6 +75,5 @@ const rideSchema = new mongoose.Schema(
 
 /* ── Quick indexes for the most common queries ── */
 rideSchema.index({ status: 1, createdAt: -1 });
-rideSchema.index({ 'from.location': '2dsphere' });
 
 module.exports = mongoose.model('Ride', rideSchema);

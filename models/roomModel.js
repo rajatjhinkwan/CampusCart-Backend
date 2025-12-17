@@ -118,10 +118,12 @@ const roomSchema = new mongoose.Schema(
         contactNumber: { type: String, required: true, trim: true },
 
         // ------------------------------
-        // STATUS & METRICS
+        // STATS & METADATA
         // ------------------------------
         isActive: { type: Boolean, default: true },
         views: { type: Number, default: 0 },
+        rating: { type: Number, default: 0 },
+        reviewCount: { type: Number, default: 0 },
 
         // ------------------------------
         // TAGS FOR FAST SEARCH

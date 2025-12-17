@@ -10,6 +10,8 @@ const Token = require("../models/tokenModel.js"); // for storing refresh/reset t
 
 
 
+const NotificationManager = require('../services/notificationManager');
+
 exports.signup = handleAsync(async (req, res) => {
   const { name, email, password, role } = req.body;
 
@@ -28,11 +30,39 @@ exports.signup = handleAsync(async (req, res) => {
   }
 
   // 3️⃣ Create new user
-  const user = await User.create({ name, email, password, role });
+  const user = await User.create({ 
+    name, 
+    email, 
+    password, 
+    role,
+    isVerified: false // Default to false
+  });
   console.log("🟢 User created successfully:", user._id);
+
+  // 4️⃣ Generate Verification Token (reuse randomBytes logic)
+  const verifyToken = crypto.randomBytes(32).toString("hex");
+  const hashedVerifyToken = crypto.createHash("sha256").update(verifyToken).digest("hex");
+
+  // Save verification token
+  await Token.create({
+    userId: user._id,
+    token: hashedVerifyToken,
+    purpose: "emailVerification",
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+  });
+
+  // 🔔 Send Welcome + Verification Email
+  const verifyURL = `${req.protocol}://${req.get("host")}/verify-email?token=${verifyToken}`;
+  
+  NotificationManager.notify(user, 'welcome', { 
+    name: user.name, 
+    verifyLink: verifyURL 
+  }, { sendEmail: true, sendSms: false })
+    .catch(err => console.error("Failed to send welcome/verify notification:", err));
 
   // 4️⃣ Generate access token - pass user object, not just ID
   const accessToken = generateToken(user);
+
   console.log("🟢 Access token generated");
 
   // 5️⃣ Generate refresh token
@@ -57,7 +87,13 @@ exports.signup = handleAsync(async (req, res) => {
     console.error("❌ Error storing refresh token:", err.message);
   }
 
+    // 🔔 Send Welcome Notification (Email)
+  // We use handleAsync so if this fails, it won't crash the request, but ideally we catch inside manager
+  // NotificationManager.notify(user, 'welcome', { name: user.name }, { sendEmail: true, sendSms: false })
+  //   .catch(err => console.error("Failed to send welcome notification:", err));
+
   // 7️⃣ Send uniform response format (same as Login)
+
   console.log("🚀 Signup successful:", user.email);
   res.status(201).json({
     message: "Registration successful",
@@ -240,6 +276,39 @@ exports.refreshToken = async (req, res) => {
     res.status(500).json({ message: "Token refresh failed", error: error.message });
   }
 };
+
+// ==================================================
+// ✅ VERIFY EMAIL
+// ==================================================
+exports.verifyEmail = handleAsync(async (req, res) => {
+  const { token } = req.query; // Expecting ?token=...
+
+  if (!token) return res.status(400).json({ message: "Invalid token" });
+
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+  const tokenDoc = await Token.findOne({
+    token: hashedToken,
+    purpose: "emailVerification",
+  });
+
+  if (!tokenDoc) {
+    return res.status(400).json({ message: "Token is invalid or has expired" });
+  }
+
+  const user = await User.findById(tokenDoc.userId);
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  user.isVerified = true;
+  await user.save();
+
+  await Token.deleteOne({ _id: tokenDoc._id });
+
+  // Optionally send a "Verification Success" email
+  // NotificationManager.notify(user, 'verification_success', ...);
+
+  res.status(200).json({ message: "Email verified successfully. You can now login." });
+});
 
 // ==================================================
 // 🧠 FORGOT PASSWORD

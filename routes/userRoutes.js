@@ -36,11 +36,24 @@ router.get('/', protect, admin, handleAsync(userController.getAllUsers));
 // Admin: ban or unban user
 router.patch('/:userId/ban', protect, admin, handleAsync(userController.banUser));
 
+// Admin: delete user
+router.delete('/:userId', protect, admin, handleAsync(userController.adminDeleteUser));
+
+// =========================
+// 👥 FOLLOW / UNFOLLOW
+// =========================
+router.post('/:id/follow', protect, handleAsync(userController.followUser));
+router.post('/:id/unfollow', protect, handleAsync(userController.unfollowUser));
+router.get('/:id/followers', handleAsync(userController.getFollowers));
+router.get('/:id/following', handleAsync(userController.getFollowing));
+
 // Wishlist routes proxied to user controller for convenience
 router.get('/:userId/wishlist', protect, handleAsync(userController.getUserWishlist));
 
 // Account metrics for dashboard
 router.get('/account-metrics', protect, handleAsync(userController.getAccountMetrics));
+// Environment summary (carbon/waste)
+router.get('/me/environment', protect, handleAsync(userController.getEnvironmentSummary));
 
 // =========================
 // 💳 PREMIUM CHECKOUT (Stripe)

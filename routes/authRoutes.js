@@ -21,6 +21,9 @@ router.post('/logout', auth.protect, handleAsync(authController.logout));
 // Get Profile (protected)
 router.get('/me', auth.protect, handleAsync(authController.getProfile));
 
+// Update Profile
+router.put('/updateProfile', auth.protect, handleAsync(authController.updateProfile));
+
 // Refresh Token
 router.post('/refresh', auth.refreshProtect, handleAsync(authController.refreshToken));
 

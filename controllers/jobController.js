@@ -34,7 +34,7 @@ exports.createJob = async (req, res) => {
 
         // Build location string from structured location
         let loc = req.body.location;
-        try { if (typeof loc === "string") loc = JSON.parse(loc); } catch {}
+        try { if (typeof loc === "string") loc = JSON.parse(loc); } catch { }
         if (loc && (loc.city || loc.state || loc.pincode || loc.address)) {
             const city = loc.city ? String(loc.city) : "";
             const state = loc.state ? String(loc.state) : "";
@@ -92,9 +92,9 @@ exports.getAllJobs = async (req, res) => {
 
         const jobs = await Job.find(query)
             .sort({ createdAt: -1 })
-            .skip((page - 1) * limit)
+            .skip((parseInt(page) - 1) * parseInt(limit))
             .limit(parseInt(limit))
-            .populate("postedBy", "name email"); // Optional: get poster info
+            .populate("postedBy", "name email");
 
         const totalJobs = await Job.countDocuments(query);
 
@@ -105,6 +105,54 @@ exports.getAllJobs = async (req, res) => {
             page: parseInt(page),
             jobs,
         });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// ----------------------------------
+// FILTER JOBS (Advanced)
+// ----------------------------------
+exports.filterJobs = async (req, res) => {
+    try {
+        const { search, jobType, location, minSalary, maxSalary, page = 1, limit = 10 } = req.query;
+
+        const query = {};
+
+        // 1. Text Search
+        if (search) {
+            query.$or = [
+                { title: { $regex: search, $options: "i" } },
+                { companyName: { $regex: search, $options: "i" } },
+                { description: { $regex: search, $options: "i" } }
+            ];
+        }
+
+        // 2. Job Type
+        if (jobType) {
+            query.jobType = jobType;
+        }
+
+        // 3. Location
+        if (location) {
+            query.location = { $regex: location, $options: "i" };
+        }
+
+        const jobs = await Job.find(query)
+            .sort({ createdAt: -1 })
+            .skip((parseInt(page) - 1) * parseInt(limit))
+            .limit(parseInt(limit))
+            .populate("postedBy", "name email");
+
+        const total = await Job.countDocuments(query);
+
+        res.status(200).json({
+            success: true,
+            count: jobs.length,
+            total,
+            jobs
+        });
+
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
@@ -208,11 +256,37 @@ exports.updateJob = async (req, res) => {
 // Only the owner can delete
 // ----------------------------------
 exports.deleteJob = async (req, res) => {
-    try {
-        const job = await Job.findOneAndDelete({ _id: req.params.id, postedBy: req.user._id });
-        if (!job) return res.status(404).json({ success: false, message: "Job not found or unauthorized" });
-        res.status(200).json({ success: true, message: "Job deleted successfully" });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+  try {
+    const job = await Job.findOneAndDelete({ _id: req.params.id, postedBy: req.user._id });
+    if (!job) return res.status(404).json({ success: false, message: "Job not found or unauthorized" });
+    res.status(200).json({ success: true, message: "Job deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.adminToggleJobActive = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { active } = req.body;
+    const job = await Job.findById(id);
+    if (!job) return res.status(404).json({ success: false, message: "Job not found" });
+    job.isActive = Boolean(active);
+    await job.save();
+    res.status(200).json({ success: true, isActive: job.isActive });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.adminDeleteJob = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const job = await Job.findById(id);
+    if (!job) return res.status(404).json({ success: false, message: "Job not found" });
+    await job.deleteOne();
+    res.status(200).json({ success: true, message: "Job deleted (admin)" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 };

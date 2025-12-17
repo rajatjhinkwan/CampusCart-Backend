@@ -8,6 +8,94 @@ const Conversation = require('../models/conversationModel');
 const Message = require('../models/messageModel');
 
 // ======================================================
+// 👥 FOLLOW USER
+// ======================================================
+exports.followUser = async (req, res) => {
+  try {
+    const userToFollowId = req.params.id;
+    const currentUserId = req.user._id;
+
+    if (userToFollowId === currentUserId.toString()) {
+      return res.status(400).json({ message: "You cannot follow yourself" });
+    }
+
+    const userToFollow = await User.findById(userToFollowId);
+    const currentUser = await User.findById(currentUserId);
+
+    if (!userToFollow || !currentUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (currentUser.following.includes(userToFollowId)) {
+      return res.status(400).json({ message: "You are already following this user" });
+    }
+
+    currentUser.following.push(userToFollowId);
+    userToFollow.followers.push(currentUserId);
+
+    await currentUser.save();
+    await userToFollow.save();
+
+    res.status(200).json({ message: "Followed successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error following user", error: error.message });
+  }
+};
+
+// ======================================================
+// 👥 UNFOLLOW USER
+// ======================================================
+exports.unfollowUser = async (req, res) => {
+  try {
+    const userToUnfollowId = req.params.id;
+    const currentUserId = req.user._id;
+
+    const userToUnfollow = await User.findById(userToUnfollowId);
+    const currentUser = await User.findById(currentUserId);
+
+    if (!userToUnfollow || !currentUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    currentUser.following = currentUser.following.filter(id => id.toString() !== userToUnfollowId);
+    userToUnfollow.followers = userToUnfollow.followers.filter(id => id.toString() !== currentUserId.toString());
+
+    await currentUser.save();
+    await userToUnfollow.save();
+
+    res.status(200).json({ message: "Unfollowed successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error unfollowing user", error: error.message });
+  }
+};
+
+// ======================================================
+// 👥 GET FOLLOWERS
+// ======================================================
+exports.getFollowers = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id).populate("followers", "name avatar username");
+        if (!user) return res.status(404).json({ message: "User not found" });
+        res.status(200).json({ success: true, followers: user.followers });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching followers", error: error.message });
+    }
+};
+
+// ======================================================
+// 👥 GET FOLLOWING
+// ======================================================
+exports.getFollowing = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id).populate("following", "name avatar username");
+        if (!user) return res.status(404).json({ message: "User not found" });
+        res.status(200).json({ success: true, following: user.following });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching following", error: error.message });
+    }
+};
+
+// ======================================================
 // 👤 GET MY PROFILE
 // ======================================================
 exports.getMyProfile = async (req, res) => {
@@ -44,20 +132,37 @@ exports.updateMyProfile = async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
+    // Validate required fields
+    if (updates.name !== undefined && (!updates.name || updates.name.trim() === '')) {
+      return res.status(400).json({ message: 'Name is required and cannot be empty' });
+    }
+
     // 🔼 If avatar image provided
     if (req.file && req.file.buffer) {
-      const uploadResult = await uploadFromBuffer(req.file.buffer, {
-        folder: 'avatars',
-        public_id: `${user._id}_avatar`,
-        overwrite: true,
-      });
-      updates.avatar = uploadResult.secure_url;
+      try {
+        const uploadResult = await uploadFromBuffer(req.file.buffer, {
+          folder: 'avatars',
+          public_id: `${user._id}_avatar`,
+          overwrite: true,
+        });
+        updates.avatar = uploadResult.secure_url;
+      } catch (uploadError) {
+        console.error('Cloudinary upload failed:', uploadError);
+        // Continue without updating avatar, don't fail the entire request
+        // Optionally, you could return a warning message
+      }
     }
 
     // Update allowed fields only
-    const allowedFields = ['name', 'phone', 'avatar', 'bio', 'location', 'username'];
+    const allowedFields = ['name', 'phone', 'avatar', 'bio', 'location', 'username', 'institution'];
     allowedFields.forEach((field) => {
-      if (updates[field] !== undefined) user[field] = updates[field];
+      if (updates[field] !== undefined) {
+        if (field === 'name' || field === 'username') {
+          user[field] = updates[field].trim();
+        } else {
+          user[field] = updates[field];
+        }
+      }
     });
 
     await user.save();
@@ -75,9 +180,11 @@ exports.updateMyProfile = async (req, res) => {
         username: user.username,
         bio: user.bio,
         location: user.location,
+        institution: user.institution,
       },
     });
   } catch (error) {
+    console.error('Error updating profile:', error);
     res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
 };
@@ -237,6 +344,14 @@ exports.getAllUsers = async (req, res) => {
   });
 };
 
+exports.adminDeleteUser = async (req, res) => {
+  const { userId } = req.params;
+  const user = await User.findById(userId);
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  await user.deleteOne();
+  res.status(200).json({ success: true, message: 'User deleted' });
+};
+
 // ======================================================
 // 🚫 ADMIN: BAN OR UNBAN USER
 // ======================================================
@@ -332,5 +447,56 @@ exports.getAccountMetrics = async (req, res) => {
     successfulSales: soldCount,
     responseRate,
     trustScore,
+  });
+};
+
+exports.getEnvironmentSummary = async (req, res) => {
+  const userId = req.user._id;
+  const products = await Product.find({ seller: userId, isSold: true }).populate('category', 'title');
+  const coeff = { Laptop: 200, Mobile: 70, Furniture: 100, Fashion: 25, Electronics: 120, Default: 60 };
+  const harmCoeff = { Laptop: 3.0, Mobile: 1.8, Furniture: 5.0, Fashion: 0.8, Electronics: 2.5, Default: 1.0 };
+  const savedFactor = 0.7;
+  const avoidedHarmFactor = 0.6;
+  const pickType = (p) => {
+    const t = (p.title || '').toLowerCase();
+    const cat = (p.category?.title || '');
+    if (t.includes('laptop')) return 'Laptop';
+    if (t.includes('mobile') || t.includes('phone') || t.includes('iphone') || t.includes('android')) return 'Mobile';
+    if (cat && /furniture/i.test(cat)) return 'Furniture';
+    if (cat && /fashion|clothing|apparel/i.test(cat)) return 'Fashion';
+    if (cat && /electronic/i.test(cat)) return 'Electronics';
+    return 'Default';
+  };
+  const byCat = {};
+  const harmByCat = {};
+  let totalSaved = 0;
+  let wasteAvoided = 0;
+  let harmNewTotal = 0;
+  let harmAvoidedTotal = 0;
+  for (const p of products) {
+    const type = pickType(p);
+    const base = coeff[type] ?? coeff.Default;
+    const harmBase = harmCoeff[type] ?? harmCoeff.Default;
+    const saved = p.environment?.savedCo2Kg ?? Number((base * savedFactor).toFixed(1));
+    const avoidedWaste = p.environment?.avoidedWasteKg ?? Number((1.5).toFixed(1));
+    const harmNew = p.environment?.harmNewKg ?? Number(harmBase.toFixed(2));
+    const harmAvoided = p.environment?.harmAvoidedKg ?? Number((harmBase * avoidedHarmFactor).toFixed(2));
+    byCat[type] = (byCat[type] || 0) + saved;
+    harmByCat[type] = (harmByCat[type] || 0) + harmAvoided;
+    totalSaved += saved;
+    wasteAvoided += avoidedWaste;
+    harmNewTotal += harmNew;
+    harmAvoidedTotal += harmAvoided;
+  }
+  const chart = Object.keys(byCat).map((k) => ({ category: k, savedKgCO2: Number(byCat[k].toFixed(1)) }));
+  const harmChart = Object.keys(harmByCat).map((k) => ({ category: k, avoidedKg: Number(harmByCat[k].toFixed(2)) }));
+  res.status(200).json({
+    success: true,
+    chart,
+    totalSaved: Number(totalSaved.toFixed(1)),
+    wasteAvoided: Number(wasteAvoided.toFixed(1)),
+    harmChart,
+    harmNewTotal: Number(harmNewTotal.toFixed(2)),
+    harmAvoidedTotal: Number(harmAvoidedTotal.toFixed(2)),
   });
 };

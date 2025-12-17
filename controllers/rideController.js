@@ -2,25 +2,22 @@
 const Ride = require('../models/rideModel');
 const DriverLocation = require('../models/driverLocationModel');
 const { haversineDistance, estimateETAmins } = require('../utils/haversine');
-const mongoose = require('mongoose');
+const User = require('../models/userModel');
+const NotificationManager = require('../services/notificationManager');
 
 // ------------------------------------------------------------------
-// 1️⃣ CREATE A NEW RIDE REQUEST
+// 1️⃣ CREATE A RIDE REQUEST
 // ------------------------------------------------------------------
 exports.createRide = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
   try {
     const { from, to, seatsRequested } = req.body;
     const passengerId = req.user.id; // <‑‑ now we trust the JWT
 
     // ---- Validation ------------------------------------------------
     if (!from?.address || !to?.address || !from?.lat || !from?.lng || !to?.lat || !to?.lng) {
-      await session.abortTransaction();
       return res.status(400).json({ message: 'Invalid request body' });
     }
     if (seatsRequested < 1 || seatsRequested > 10) {
-      await session.abortTransaction();
       return res.status(400).json({ message: 'seatsRequested must be between 1‑10' });
     }
 
@@ -33,41 +30,35 @@ exports.createRide = async (req, res) => {
     const toLocation = { type: 'Point', coordinates: [to.lng, to.lat] };
 
     // ---- Ride document ---------------------------------------------
-    const ride = await Ride.create(
-      [
-        {
-          passengerId,
-          from: { address: from.address, lat: from.lat, lng: from.lng, location: fromLocation },
-          to: { address: to.address, lat: to.lat, lng: to.lng, location: toLocation },
-          seatsRequested,
-          distanceKm,
-          estimatedDurationMins
-        }
-      ],
-      { session }
-    );
-
-    await session.commitTransaction();
+    const ride = await Ride.create([
+      {
+        passengerId,
+        from: { address: from.address, lat: from.lat, lng: from.lng, location: fromLocation },
+        to: { address: to.address, lat: to.lat, lng: to.lng, location: toLocation },
+        seatsRequested,
+        distanceKm,
+        estimatedDurationMins
+      }
+    ]);
 
     // ---- Emit realtime event ----------------------------------------
     const io = req.app.get('io');
-    io.to('drivers').emit('newRide', {
-      rideId: ride[0]._id,
-      passengerId,
-      from: ride[0].from,
-      to: ride[0].to,
-      seatsRequested,
-      distanceKm,
-      estimatedDurationMins
-    });
+    if (io && typeof io.to === 'function') {
+      io.to('drivers').emit('newRide', {
+        rideId: ride[0]._id,
+        passengerId,
+        from: ride[0].from,
+        to: ride[0].to,
+        seatsRequested,
+        distanceKm,
+        estimatedDurationMins
+      });
+    }
 
     res.status(201).json({ success: true, ride: ride[0] });
   } catch (err) {
-    await session.abortTransaction();
-    console.error('createRide error:', err);
-    res.status(500).json({ message: 'Server error' });
-  } finally {
-    session.endSession();
+    console.error('createRide error:', err?.message || err);
+    res.status(err?.name === 'ValidationError' ? 400 : 500).json({ message: err?.message || 'Server error' });
   }
 };
 
@@ -77,24 +68,25 @@ exports.createRide = async (req, res) => {
 exports.getOpenRides = async (req, res) => {
   try {
     const { lat, lng, radiusKm = 10 } = req.query;
-    if (!lat || !lng) {
-      return res.status(400).json({ message: 'lat and lng required' });
-    }
-
-    const latitude = parseFloat(lat);
-    const longitude = parseFloat(lng);
-    const radiusMeters = radiusKm * 1000;
-
-    const rides = await Ride.find({
-      status: 'OPEN',
-      'from.location': {
-        $near: {
-          $geometry: { type: 'Point', coordinates: [longitude, latitude] },
-          $maxDistance: radiusMeters
+    let query = { status: 'OPEN' };
+    let useGeo = lat && lng;
+    let latitude, longitude, radiusMeters;
+    if (useGeo) {
+      latitude = parseFloat(lat);
+      longitude = parseFloat(lng);
+      radiusMeters = Number(radiusKm) * 1000;
+      query = {
+        status: 'OPEN',
+        'from.location': {
+          $near: {
+            $geometry: { type: 'Point', coordinates: [longitude, latitude] },
+            $maxDistance: radiusMeters
+          }
         }
-      }
-    })
-      .populate('passengerId', 'name avatar')
+      };
+    }
+    const rides = await Ride.find(query)
+      .populate('passengerId', 'name avatar institution')
       .sort({ createdAt: -1 })
       .limit(50); // you can increase/decrease it.
 
@@ -109,8 +101,6 @@ exports.getOpenRides = async (req, res) => {
 // 3️⃣ ACCEPT A RIDE (atomic, optimistic)
 // ------------------------------------------------------------------
 exports.acceptRide = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
   try {
     const { id } = req.params;
     const driverId = req.user.id; // driver is the authenticated user
@@ -125,13 +115,12 @@ exports.acceptRide = async (req, res) => {
           assignedAt: new Date()
         }
       },
-      { new: true, session }
+      { new: true }
     )
       .populate('passengerId', 'name avatar')
       .populate('assignedDriverId', 'name avatar');
 
     if (!ride) {
-      await session.abortTransaction();
       return res.status(409).json({ message: 'Ride already assigned or does not exist' });
     }
 
@@ -151,14 +140,10 @@ exports.acceptRide = async (req, res) => {
     io.to(passengerRoom).emit('rideAssigned', payload);
     io.to(driverRoom).emit('rideAssigned', payload);
 
-    await session.commitTransaction();
     res.json({ success: true, ride });
   } catch (err) {
-    await session.abortTransaction();
     console.error('acceptRide error:', err);
     res.status(500).json({ message: 'Server error' });
-  } finally {
-    session.endSession();
   }
 };
 
@@ -345,6 +330,31 @@ exports.getUserRides = async (req, res) => {
     res.json({ success: true, count: rides.length, rides });
   } catch (err) {
     console.error('getUserRides error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ------------------------------------------------------------------
+// 9️⃣ ADMIN OVERVIEW FOR RIDES/DRIVERS
+// ------------------------------------------------------------------
+exports.getAdminRideOverview = async (req, res) => {
+  try {
+    const [openCount, assignedCount, onRouteCount, completedToday, cancelledToday] = await Promise.all([
+      Ride.countDocuments({ status: 'OPEN' }),
+      Ride.countDocuments({ status: 'ASSIGNED' }),
+      Ride.countDocuments({ status: 'ON_ROUTE' }),
+      Ride.countDocuments({ status: 'COMPLETED', completedAt: { $gte: new Date(new Date().setHours(0,0,0,0)) } }),
+      Ride.countDocuments({ status: 'CANCELLED', cancelledAt: { $gte: new Date(new Date().setHours(0,0,0,0)) } }),
+    ]);
+    const driverRegistered = await User.countDocuments({ 'settings.selling.driverRegistered': true });
+    const driverApproved = await User.countDocuments({ 'settings.selling.driverApproved': true });
+    res.json({
+      success: true,
+      rides: { openCount, assignedCount, onRouteCount, completedToday, cancelledToday },
+      drivers: { driverRegistered, driverApproved }
+    });
+  } catch (err) {
+    console.error('getAdminRideOverview error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 };

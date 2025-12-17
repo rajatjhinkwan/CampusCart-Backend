@@ -11,17 +11,37 @@ const getUserId = (user) => user._id || user.id;
 /////////////////////////////////////////////////////////////
 exports.createConversation = handleAsync(async (req, res) => {
   const senderId = getUserId(req.user);
-  const { receiverId } = req.body;
+  const { receiverId, contextType, contextId, productId } = req.body;
 
   if (!receiverId) {
     return res.status(400).json({ message: "receiverId is required" });
   }
 
+  // Use productId as contextId if contextId is missing (backward compatibility)
+  const effectiveContextId = contextId || productId;
+  const effectiveContextType = contextType || (productId ? "Product" : null);
+
   // Safety: Prevent duplicate conversations
-  let existingConv = await Conversation.findOne({
+  // If context is provided, we should probably check if conversation exists FOR THIS CONTEXT?
+  // Or just one conversation per user pair?
+  // Usually, marketplaces allow separate chats for separate items.
+  // But standard chat apps merge them.
+  // The user requirement implies negotiation for specific items.
+  // If I have one chat per user-pair, the context might get overwritten or ambiguous if they discuss multiple items.
+  // "Proper negotiation UI" suggests per-item context.
+  // Let's try to find conversation with same participants AND same context if context exists.
+  
+  let query = {
     participants: { $all: [senderId, receiverId] },
-  })
+  };
+
+  if (effectiveContextId) {
+    query.contextId = effectiveContextId;
+  }
+
+  let existingConv = await Conversation.findOne(query)
     .populate("participants", "name email avatar")
+    .populate("contextId") // Auto-populates based on contextType
     .populate({
       path: "lastMessage",
       populate: [
@@ -37,10 +57,13 @@ exports.createConversation = handleAsync(async (req, res) => {
   // Create new conversation
   const newConv = await Conversation.create({
     participants: [senderId, receiverId],
+    contextType: effectiveContextType,
+    contextId: effectiveContextId
   });
 
   const finalConv = await Conversation.findById(newConv._id)
     .populate("participants", "name email avatar")
+    .populate("contextId")
     .populate({
       path: "lastMessage",
       populate: [
@@ -68,6 +91,7 @@ exports.getUserConversations = handleAsync(async (req, res) => {
     participants: userId,
   })
     .populate("participants", "name email avatar")
+    .populate("contextId")
     .populate({
       path: "lastMessage",
       populate: [
@@ -89,6 +113,7 @@ exports.getConversationById = handleAsync(async (req, res) => {
 
   const conv = await Conversation.findById(conversationId)
     .populate("participants", "name email avatar")
+    .populate("contextId")
     .populate({
       path: "lastMessage",
       populate: [

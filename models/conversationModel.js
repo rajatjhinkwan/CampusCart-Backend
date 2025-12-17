@@ -16,6 +16,18 @@ const conversationSchema = new mongoose.Schema(
       ref: "Message",
       default: null,
     },
+
+    // Context for negotiation (Product, Room, Service, Job)
+    contextType: {
+      type: String,
+      enum: ["Product", "Room", "Service", "Job"],
+      default: null
+    },
+    contextId: {
+      type: mongoose.Schema.Types.ObjectId,
+      refPath: "contextType",
+      default: null
+    },
   },
   { timestamps: true }
 );

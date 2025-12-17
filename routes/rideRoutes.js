@@ -12,6 +12,7 @@ const {
   getUserRides
 } = require('../controllers/rideController');
 const { protect } = require('../middleware/authMiddleware');
+const admin = require('../middleware/adminMiddleware');
 
 router.use(protect); // all routes need auth
 
@@ -23,5 +24,6 @@ router.post('/:id/complete', completeRide);
 router.post('/:id/cancel', cancelRide);
 router.get('/:id', getRideById);
 router.get('/user/:userId', getUserRides);
+router.get('/admin/overview', admin, require('../controllers/rideController').getAdminRideOverview);
 
 module.exports = router;

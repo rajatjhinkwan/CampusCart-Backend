@@ -22,11 +22,15 @@ const userSchema = new mongoose.Schema(
 
     bio: { type: String, default: "" },
 
+    institution: { type: String, default: "" }, // 🏫 University/Company Name
+
     location: { type: String, default: "" },
+
+    isVerified: { type: Boolean, default: false }, // 📧 Email Verification Status
 
     role: {
       type: String,
-      enum: ["buyer", "seller", "admin"],
+      enum: ["buyer", "seller", "driver", "admin"],
       default: "buyer"
     },
 
@@ -98,11 +102,18 @@ const userSchema = new mongoose.Schema(
         autoRenewListings: { type: Boolean, default: true },
         enableOfferRequests: { type: Boolean, default: true },
         promoteListings: { type: Boolean, default: false },
+        driverRegistered: { type: Boolean, default: false },
+        driverApproved: { type: Boolean, default: false },
       },
       security: {
         twoFactorEnabled: { type: Boolean, default: false },
       },
-    }
+    },
+
+    // 👥 Social
+    followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
   },
   { timestamps: true }
 );

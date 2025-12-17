@@ -2,8 +2,10 @@ const express = require("express");
 const router = express.Router();
 
 const roomController = require("../controllers/roomController");
+const reviewController = require("../controllers/reviewController");
 const auth = require("../middleware/authMiddleware");
 const handleAsync = require("../utils/handleAsync");
+const admin = require("../middleware/adminMiddleware");
 const upload = require("../middleware/uploadMiddleware");
 
 
@@ -49,6 +51,13 @@ router.get("/:id", handleAsync(roomController.getRoomById));
 
 
 // ----------------------------------
+// 💬 REVIEWS
+// ----------------------------------
+router.post("/:roomId/reviews", auth.protect, handleAsync(reviewController.createReview));
+router.get("/:roomId/reviews", handleAsync(reviewController.getReviews));
+
+
+// ----------------------------------
 // UPDATE ROOM (Protected)
 // ----------------------------------
 router.put("/:id", auth.protect, handleAsync(roomController.updateRoom));
@@ -58,6 +67,10 @@ router.put("/:id", auth.protect, handleAsync(roomController.updateRoom));
 // DELETE ROOM (Protected)
 // ----------------------------------
 router.delete("/:id", auth.protect, handleAsync(roomController.deleteRoom));
+
+// ADMIN: toggle active and delete
+router.patch("/:id/admin/active", auth.protect, admin, handleAsync(roomController.adminToggleRoomActive));
+router.delete("/:id/admin", auth.protect, admin, handleAsync(roomController.adminDeleteRoom));
 
 
 module.exports = router;
