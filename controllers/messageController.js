@@ -20,10 +20,12 @@ exports.sendMessage = handleAsync(async (req, res) => {
   } = req.body;
 
   // Normalize message content to ONE variable
-  const message = text || content;
+  const message = text || content || "";
+  const hasText = !!message.trim();
+  const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
 
-  if (!message || !message.trim()) {
-    return res.status(400).json({ message: "Message text is required" });
+  if (!hasText && !hasAttachments) {
+    return res.status(400).json({ message: "Message requires text or attachments" });
   }
 
   let conversation;
@@ -62,8 +64,8 @@ exports.sendMessage = handleAsync(async (req, res) => {
     conversation: conversation._id,
     sender: senderId,
     receiver: receiverId,
-    content: message,
-    attachments: attachments || [],
+    content: hasText ? message : (hasAttachments ? "[attachment]" : ""),
+    attachments: hasAttachments ? attachments : [],
     isRead: false,
   });
 
@@ -81,6 +83,30 @@ exports.sendMessage = handleAsync(async (req, res) => {
     io.of('/chat').to(`conversation:${conversation._id.toString()}`).emit("newMessage", populatedMessage);
 
   res.status(201).json(populatedMessage);
+});
+
+/////////////////////////////////////////////////////////////
+// X) UPLOAD ATTACHMENTS (images) FOR A MESSAGE
+/////////////////////////////////////////////////////////////
+exports.uploadAttachments = handleAsync(async (req, res) => {
+  // expects multipart/form-data with field name 'images'
+  const files = req.files || [];
+  if (!files.length) {
+    return res.status(400).json({ message: "No files uploaded" });
+  }
+  const { uploadFromBuffer } = require("../config/cloudinary");
+  const urls = [];
+  for (const file of files) {
+    try {
+      const r = await uploadFromBuffer(file.buffer, { folder: "messages" });
+      urls.push(r.secure_url);
+    } catch (e) {
+      const b64 = file.buffer.toString("base64");
+      const fallback = `data:${file.mimetype};base64,${b64}`;
+      urls.push(fallback);
+    }
+  }
+  res.json({ success: true, attachments: urls });
 });
 
 

@@ -5,7 +5,7 @@ function isAdmin(req, res, next) {
     }
 
     // ✅ Check role instead of isAdmin
-    if (req.user.role === "admin") {
+    if (req.user.role && (req.user.role === "admin" || req.user.role.toLowerCase() === "admin")) {
       return next();
     }
 

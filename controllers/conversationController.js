@@ -35,10 +35,6 @@ exports.createConversation = handleAsync(async (req, res) => {
     participants: { $all: [senderId, receiverId] },
   };
 
-  if (effectiveContextId) {
-    query.contextId = effectiveContextId;
-  }
-
   let existingConv = await Conversation.findOne(query)
     .populate("participants", "name email avatar")
     .populate("contextId") // Auto-populates based on contextType

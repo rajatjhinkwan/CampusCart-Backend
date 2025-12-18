@@ -4,6 +4,7 @@ const router = express.Router();
 
 const messageController = require("../controllers/messageController");
 const { protect } = require("../middleware/authMiddleware");
+const upload = require("../middleware/uploadMiddleware");
 
 router.post("/", protect, messageController.sendMessage);
 
@@ -20,5 +21,13 @@ router.put(
 );
 
 router.delete("/:messageId", protect, messageController.deleteMessage);
+
+// Upload message attachments (images)
+router.post(
+  "/attachments",
+  protect,
+  upload.array("images", 5),
+  messageController.uploadAttachments
+);
 
 module.exports = router;

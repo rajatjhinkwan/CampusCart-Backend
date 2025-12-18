@@ -12,6 +12,10 @@ const NotificationManager = require('../services/notificationManager');
 // 🟢 CREATE PRODUCT (Seller adds new product)
 // ==================================================
 exports.createProduct = handleAsync(async (req, res) => {
+  console.log("Creating product:", req.body.title);
+  if (req.files) console.log("Files received:", req.files.length);
+  else console.log("No files received");
+
   const data = { ...req.body };
   data.seller = req.user.id;
 
@@ -105,6 +109,7 @@ exports.getProducts = handleAsync(async (req, res) => {
   if (req.query.maxPrice) filter.price = { ...filter.price, $lte: Number(req.query.maxPrice) };
   if (req.query.condition) filter.condition = req.query.condition;
   if (req.query.type) filter.type = req.query.type;
+  if (req.query.location) filter.location = { $regex: req.query.location, $options: "i" };
   if (req.query.search) filter.$text = { $search: req.query.search }; // text index needed
 
   let sort = { createdAt: -1 };

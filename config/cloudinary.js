@@ -30,15 +30,11 @@ function uploadFromBuffer(buffer, options = {}) {
       public_id: `fallback_${now}`
     });
   }
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(options, (error, result) => {
       if (error) {
-        const now = Date.now();
-        const folder = options.folder || 'uploads';
-        return resolve({
-          secure_url: `https://via.placeholder.com/640x480?text=${encodeURIComponent(folder)}`,
-          public_id: `fallback_${now}`
-        });
+        // Instead of resolving with placeholder, reject so controller can use base64 fallback
+        return reject(error);
       }
       resolve(result);
     });
@@ -52,23 +48,13 @@ async function upload(input, options = {}) {
     return uploadFromBuffer(input, options);
   }
   if (!configured) {
-    const now = Date.now();
-    const folder = options.folder || 'uploads';
-    return {
-      secure_url: `https://via.placeholder.com/640x480?text=${encodeURIComponent(folder)}`,
-      public_id: `fallback_${now}`
-    };
+    throw new Error("Cloudinary not configured");
   }
   try {
     const res = await cloudinary.uploader.upload(input, options);
     return res;
-  } catch (_) {
-    const now = Date.now();
-    const folder = options.folder || 'uploads';
-    return {
-      secure_url: `https://via.placeholder.com/640x480?text=${encodeURIComponent(folder)}`,
-      public_id: `fallback_${now}`
-    };
+  } catch (error) {
+    throw error;
   }
 }
 
