@@ -157,7 +157,12 @@ exports.startRide = async (req, res) => {
 
     const ride = await Ride.findOneAndUpdate(
       { _id: id, status: 'ASSIGNED', assignedDriverId: driverId },
-      { $set: { status: 'ON_ROUTE' } },
+      { 
+        $set: { 
+          status: 'ON_ROUTE',
+          startedAt: new Date()
+        } 
+      },
       { new: true }
     )
       .populate('passengerId', 'name avatar')
@@ -190,13 +195,32 @@ exports.completeRide = async (req, res) => {
     const driverId = req.user.id;
     const { actualDurationMins } = req.body;
 
-    const ride = await Ride.findOneAndUpdate(
-      { _id: id, status: 'ON_ROUTE', assignedDriverId: driverId },
+    // 1. Fetch the ride first to get distance
+    const existingRide = await Ride.findOne({ _id: id, status: 'ON_ROUTE', assignedDriverId: driverId });
+    if (!existingRide) {
+      return res.status(404).json({ message: 'Ride not found or not yours' });
+    }
+
+    // 2. Calculate Fare
+    // Simple pricing model: Base $5 + $2/km + $0.5/min
+    const BASE_FARE = 5;
+    const RATE_PER_KM = 2;
+    const RATE_PER_MIN = 0.5;
+
+    const distance = existingRide.distanceKm || 0;
+    const duration = actualDurationMins || existingRide.estimatedDurationMins || 0;
+
+    const fare = Math.round((BASE_FARE + (distance * RATE_PER_KM) + (duration * RATE_PER_MIN)) * 100) / 100;
+
+    // 3. Update Ride
+    const ride = await Ride.findByIdAndUpdate(
+      id,
       {
         $set: {
           status: 'COMPLETED',
           completedAt: new Date(),
-          actualDurationMins: actualDurationMins ?? null
+          actualDurationMins: duration,
+          fare: fare
         }
       },
       { new: true }
@@ -204,16 +228,21 @@ exports.completeRide = async (req, res) => {
       .populate('passengerId', 'name avatar')
       .populate('assignedDriverId', 'name avatar');
 
-    if (!ride) {
-      return res.status(404).json({ message: 'Ride not found or not yours' });
-    }
-
     const io = req.app.get('io');
     const passengerRoom = `user_${ride.passengerId._id}`;
     const driverRoom = `user_${driverId}`;
 
-    io.to(passengerRoom).emit('rideCompleted', { rideId: ride._id });
-    io.to(driverRoom).emit('rideCompleted', { rideId: ride._id });
+    // Emit event with fare details
+    const completionPayload = { 
+      rideId: ride._id,
+      status: 'COMPLETED',
+      fare,
+      distance: ride.distanceKm,
+      duration: ride.actualDurationMins
+    };
+
+    io.to(passengerRoom).emit('rideCompleted', completionPayload);
+    io.to(driverRoom).emit('rideCompleted', completionPayload);
 
     res.json({ success: true, ride });
   } catch (err) {

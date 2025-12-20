@@ -537,71 +537,111 @@ exports.getCarbonOverview = handleAsync(async (req, res) => {
 exports.getAdminStats = handleAsync(async (req, res) => {
   const rangeDaysRaw = Number(req.query.rangeDays || 30);
   const rangeDays = Math.max(1, Math.min(isNaN(rangeDaysRaw) ? 30 : rangeDaysRaw, 365));
-  const [allCount, allValueAgg, soldAgg, unsoldCount] = await Promise.all([
+  
+  const dateLimit = new Date();
+  dateLimit.setDate(dateLimit.getDate() - rangeDays);
+
+  const [allCount, allValueAgg, soldAgg, unsoldCount, dailySales, dailyAdded] = await Promise.all([
     Product.countDocuments({}),
     Product.aggregate([{ $group: { _id: null, totalValue: { $sum: { $ifNull: ["$price", 0] } } } }]),
     Product.aggregate([
       { $match: { isSold: true } },
-      { $group: { _id: null, soldCount: { $sum: 1 }, totalSalesValue: { $sum: { $ifNull: ["$price", 0] } } } },
+      { $group: { _id: null, totalSalesValue: { $sum: { $ifNull: ["$price", 0] } }, soldCount: { $sum: 1 } } }
     ]),
     Product.countDocuments({ isSold: false }),
+    // Daily Sales (Sold products grouped by soldAt or updatedAt)
+    Product.aggregate([
+      { 
+        $match: { 
+          isSold: true, 
+          updatedAt: { $gte: dateLimit } 
+        } 
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$updatedAt" } },
+          total: { $sum: "$price" },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } },
+      { $project: { date: "$_id", total: 1, count: 1, _id: 0 } }
+    ]),
+    // Daily Added (Products created grouped by createdAt)
+    Product.aggregate([
+      { 
+        $match: { 
+          createdAt: { $gte: dateLimit } 
+        } 
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          totalValue: { $sum: "$price" },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } },
+      { $project: { date: "$_id", totalValue: 1, count: 1, _id: 0 } }
+    ])
   ]);
-  const totals = {
-    totalProducts: allCount,
-    totalValue: Number(allValueAgg?.[0]?.totalValue || 0),
-    soldCount: Number(soldAgg?.[0]?.soldCount || 0),
-    totalSalesValue: Number(soldAgg?.[0]?.totalSalesValue || 0),
-    unsoldCount: Number(unsoldCount || 0),
-  };
-  const now = new Date();
-  const start = new Date(now);
-  start.setDate(now.getDate() - (rangeDays - 1));
-  start.setHours(0, 0, 0, 0);
-  const daily = await Product.aggregate([
+
+  const all = await Product.aggregate([
+    { $group: { _id: "$category", avgPrice: { $avg: { $ifNull: ["$price", 0] } }, count: { $sum: 1 } } },
     {
-      $match: {
-        isSold: true,
-        $expr: {
-          $gte: [
-            { $ifNull: ["$soldAt", "$createdAt"] },
-            start,
-          ],
-        },
+      $lookup: {
+        from: "categories",
+        localField: "_id",
+        foreignField: "_id",
+        as: "cat",
       },
     },
     {
       $project: {
-        day: {
-          $dateToString: { format: "%Y-%m-%d", date: { $ifNull: ["$soldAt", "$createdAt"] } },
-        },
-        price: { $ifNull: ["$price", 0] },
+        categoryId: "$_id",
+        avgPrice: 1,
+        count: 1,
+        title: { $ifNull: [{ $arrayElemAt: ["$cat.title", 0] }, "" ] },
       },
     },
-    { $group: { _id: "$day", total: { $sum: "$price" } } },
-    { $sort: { _id: 1 } },
+    { $sort: { avgPrice: -1 } },
   ]);
-  const added = await Product.aggregate([
-    { $match: { $expr: { $gte: ["$createdAt", start] } } },
+
+  const sold = await Product.aggregate([
+    { $match: { isSold: true } },
+    { $group: { _id: "$category", avgPrice: { $avg: { $ifNull: ["$price", 0] } }, count: { $sum: 1 } } },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "_id",
+        foreignField: "_id",
+        as: "cat",
+      },
+    },
     {
       $project: {
-        day: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-        price: { $ifNull: ["$price", 0] },
+        categoryId: "$_id",
+        avgPrice: 1,
+        count: 1,
+        title: { $ifNull: [{ $arrayElemAt: ["$cat.title", 0] }, "" ] },
       },
     },
-    { $group: { _id: "$day", totalValue: { $sum: "$price" }, count: { $sum: 1 } } },
-    { $sort: { _id: 1 } },
+    { $sort: { avgPrice: -1 } },
   ]);
-  const baselineAgg = await Product.aggregate([
-    { $match: { $expr: { $lt: ["$createdAt", start] } } },
-    { $group: { _id: null, total: { $sum: { $ifNull: ["$price", 0] } } } },
-  ]);
-  res.json({
-    success: true,
-    totals,
-    dailySales: daily.map(d => ({ date: d._id, total: d.total })),
-    dailyAdded: added.map(d => ({ date: d._id, totalValue: d.totalValue, count: d.count })),
-    baselineValueBeforeStart: Number(baselineAgg?.[0]?.total || 0),
-    rangeDays,
+
+  res.json({ 
+    success: true, 
+    all, 
+    sold,
+    dailySales,
+    dailyAdded,
+    totals: {
+      totalProducts: allCount,
+      totalValue: allValueAgg[0]?.totalValue || 0,
+      totalSalesValue: soldAgg[0]?.totalSalesValue || 0,
+      soldCount: soldAgg[0]?.soldCount || 0,
+      unsoldCount
+    }
   });
 });
 

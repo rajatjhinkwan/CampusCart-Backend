@@ -23,12 +23,8 @@ cloudinary.config({
 function uploadFromBuffer(buffer, options = {}) {
   const configured = CLOUDINARY_CLOUD_NAME && CLOUDINARY_API_KEY && CLOUDINARY_API_SECRET;
   if (!configured) {
-    const now = Date.now();
-    const folder = options.folder || 'uploads';
-    return Promise.resolve({
-      secure_url: `https://via.placeholder.com/640x480?text=${encodeURIComponent(folder)}`,
-      public_id: `fallback_${now}`
-    });
+    // Reject so that controllers can fallback to base64 or other storage
+    return Promise.reject(new Error("Cloudinary not configured"));
   }
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(options, (error, result) => {

@@ -21,6 +21,7 @@ router.put(
 );
 
 router.delete("/:messageId", protect, messageController.deleteMessage);
+router.put("/:messageId", protect, messageController.editMessage);
 
 // Upload message attachments (images)
 router.post(

@@ -188,3 +188,35 @@ exports.deleteMessage = handleAsync(async (req, res) => {
 
   res.status(200).json({ message: "Message deleted" });
 });
+
+/////////////////////////////////////////////////////////////
+// 5) EDIT A MESSAGE
+/////////////////////////////////////////////////////////////
+exports.editMessage = handleAsync(async (req, res) => {
+  const { messageId } = req.params;
+  const { content } = req.body;
+  const userId = getUserId(req.user);
+
+  const message = await Message.findById(messageId);
+  if (!message)
+    return res.status(404).json({ message: "Message not found" });
+
+  if (message.sender.toString() !== userId.toString()) {
+    return res.status(403).json({ message: "Not authorized" });
+  }
+
+  // Update content
+  message.content = content;
+  await message.save();
+
+  const conversationId = message.conversation;
+
+  // Emit socket event
+  const io = req.app.get("io");
+  if (io)
+    io.of('/chat')
+      .to(`conversation:${conversationId.toString()}`)
+      .emit("messageUpdated", { messageId, content });
+
+  res.status(200).json({ message: "Message updated", data: message });
+});

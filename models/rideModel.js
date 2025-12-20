@@ -64,9 +64,11 @@ const rideSchema = new mongoose.Schema(
     distanceKm: Number,
     estimatedDurationMins: Number,
     actualDurationMins: Number,
+    fare: Number,
 
     // timestamps (createdAt/updatedAt) are added automatically
     assignedAt: Date,
+    startedAt: Date,
     completedAt: Date,
     cancelledAt: Date
   },

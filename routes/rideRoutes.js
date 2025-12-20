@@ -14,10 +14,10 @@ const {
 const { protect } = require('../middleware/authMiddleware');
 const admin = require('../middleware/adminMiddleware');
 
-router.use(protect); // all routes need auth
+router.get('/open', getOpenRides);
+router.use(protect);
 
 router.post('/', createRide);
-router.get('/open', getOpenRides);
 router.post('/:id/accept', acceptRide);
 router.post('/:id/start', startRide);
 router.post('/:id/complete', completeRide);

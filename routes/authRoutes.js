@@ -9,8 +9,14 @@ const handleAsync = require('../utils/handleAsync');
    AUTH ROUTES
 ----------------------------------- */
 
-// Register
+// Register (Send OTP)
 router.post('/signup', handleAsync(authController.signup));
+
+// Verify OTP
+router.post('/verify-otp', handleAsync(authController.verifyOtp));
+
+// Google Auth
+router.post('/google', handleAsync(authController.googleAuth));
 
 // Login
 router.post('/login', handleAsync(authController.login));

@@ -311,6 +311,11 @@ app.get('/api/osrm/route', async (req, res) => {
 });
 
 const routes = require('./routes');
+const requestRoutes = require('./routes/requestRoutes');
+const wishlistRoutes = require('./routes/wishlistRoutes');
+
+app.use('/api/requests', requestRoutes);
+app.use('/api/wishlist', wishlistRoutes);
 app.use('/api', routes);
 
 // Health check route for monitoring

@@ -71,6 +71,41 @@ function register(io) {
       const room = `conversation:${conversationId}`;
       io.of('/chat').to(room).emit('messageRead', { conversationId, messageId, userId: user.id });
     });
+
+    // ===========================================
+    // WebRTC Signaling Events
+    // ===========================================
+
+    // 1. Initiate Call
+    socket.on('callUser', ({ userToCall, signalData, from, name, isVideo }) => {
+      // Send to the specific user's room
+      io.of('/chat').to(`user:${userToCall}`).emit('incomingCall', { 
+        signal: signalData, 
+        from, 
+        name,
+        isVideo
+      });
+    });
+
+    // 2. Answer Call
+    socket.on('answerCall', ({ to, signal }) => {
+      io.of('/chat').to(`user:${to}`).emit('callAccepted', { signal });
+    });
+
+    // 3. ICE Candidate (Trickle ICE)
+    socket.on('ice-candidate', ({ to, candidate }) => {
+      io.of('/chat').to(`user:${to}`).emit('ice-candidate', { candidate });
+    });
+
+    // 4. End Call
+    socket.on('endCall', ({ to }) => {
+      io.of('/chat').to(`user:${to}`).emit('callEnded');
+    });
+
+    // 5. Busy / Reject
+    socket.on('rejectCall', ({ to }) => {
+        io.of('/chat').to(`user:${to}`).emit('callRejected');
+    });
   });
 }
 

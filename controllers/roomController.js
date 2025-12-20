@@ -117,8 +117,8 @@ exports.filterRooms = async (req, res) => {
         limit = 20
     } = req.query;
 
-    page = parseInt(page);
-    limit = parseInt(limit);
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
 
     let filter = {};
 
@@ -158,16 +158,16 @@ exports.filterRooms = async (req, res) => {
     const rooms = await Room.find(filter)
         .populate("seller", "name email")
         .sort(sortOptions)
-        .skip((page - 1) * limit)
-        .limit(limit);
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum);
 
     const total = await Room.countDocuments(filter);
 
     res.json({
         success: true,
         total,
-        page,
-        limit,
+        page: pageNum,
+        limit: limitNum,
         data: rooms
     });
 };

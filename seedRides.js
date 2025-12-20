@@ -19,34 +19,39 @@ const mockUsers = [
   }
 ];
 
-const mockRides = [
-  {
-    passengerId: null, // Will be set after user creation
+function withGeo(from, to) {
+  return {
     from: {
-      address: 'Hostel A, IIT Delhi',
-      lat: 28.5440,
-      lng: 77.1926
+      address: from.address,
+      lat: from.lat,
+      lng: from.lng,
+      location: { type: 'Point', coordinates: [from.lng, from.lat] }
     },
     to: {
-      address: 'Library, IIT Delhi',
-      lat: 28.5470,
-      lng: 77.1900
-    },
+      address: to.address,
+      lat: to.lat,
+      lng: to.lng,
+      location: { type: 'Point', coordinates: [to.lng, to.lat] }
+    }
+  };
+}
+
+const mockRides = [
+  {
+    passengerId: null,
+    ...withGeo(
+      { address: 'Hostel A, IIT Delhi', lat: 28.5440, lng: 77.1926 },
+      { address: 'Library, IIT Delhi', lat: 28.5470, lng: 77.1900 }
+    ),
     seatsRequested: 1,
     status: 'OPEN'
   },
   {
     passengerId: null,
-    from: {
-      address: 'Lecture Hall Complex, IIT Delhi',
-      lat: 28.5450,
-      lng: 77.1850
-    },
-    to: {
-      address: 'Sports Complex, IIT Delhi',
-      lat: 28.5490,
-      lng: 77.1880
-    },
+    ...withGeo(
+      { address: 'Lecture Hall Complex, IIT Delhi', lat: 28.5450, lng: 77.1850 },
+      { address: 'Sports Complex, IIT Delhi', lat: 28.5490, lng: 77.1880 }
+    ),
     seatsRequested: 2,
     status: 'OPEN'
   }
@@ -67,7 +72,9 @@ const mockDriverLocations = [
 
 async function seedData() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
+    const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
+    if (!uri) throw new Error('MONGO_URI not set');
+    await mongoose.connect(uri);
     console.log('Connected to MongoDB');
 
     // Clear existing data
