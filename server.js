@@ -129,7 +129,13 @@ const corsOptions = {
     }
     
     // Default allowed origins for development
-    const defaultOrigins = ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174', 'https://campus-connect-frontend.vercel.app'];
+    const defaultOrigins = [
+      'http://localhost:5173', 
+      'http://localhost:3000', 
+      'http://localhost:5174', 
+      'https://campus-connect-frontend.vercel.app',
+      'https://societyconnect1.netlify.app'
+    ];
     if (defaultOrigins.includes(origin)) {
       return callback(null, true);
     }
