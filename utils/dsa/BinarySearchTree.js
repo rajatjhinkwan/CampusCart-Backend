@@ -1,0 +1,50 @@
+class BSTNode {
+    constructor(value) {
+        this.value = value;
+        this.left = null;
+        this.right = null;
+    }
+}
+
+class BinarySearchTree {
+    constructor() {
+        this.root = null;
+    }
+
+    insert(value) {
+        const newNode = new BSTNode(value);
+        if (!this.root) {
+            this.root = newNode;
+            return this;
+        }
+        let current = this.root;
+        while (true) {
+            if (value === current.value) return undefined;
+            if (value < current.value) {
+                if (!current.left) {
+                    current.left = newNode;
+                    return this;
+                }
+                current = current.left;
+            } else {
+                if (!current.right) {
+                    current.right = newNode;
+                    return this;
+                }
+                current = current.right;
+            }
+        }
+    }
+    
+    dfsInOrder() {
+        let data = [];
+        function traverse(node) {
+            if (node.left) traverse(node.left);
+            data.push(node.value);
+            if (node.right) traverse(node.right);
+        }
+        if (this.root) traverse(this.root);
+        return data;
+    }
+}
+module.exports = BinarySearchTree;
