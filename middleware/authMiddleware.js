@@ -1,6 +1,15 @@
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const { getAccessSecret, getRefreshSecret } = require('../utils/generateToken');
 const User = require("../models/userModel");
+
+function normalizeUserId(value) {
+  if (!value) return null;
+  if (typeof value === "object" && value._id) return String(value._id);
+  const id = String(value).trim();
+  if (!mongoose.Types.ObjectId.isValid(id)) return null;
+  return id;
+}
 
 // ================================
 // 🔐 PROTECT ROUTES (Access Token)
@@ -40,7 +49,7 @@ async function protect(req, res, next) {
     }
 
     // 5️⃣ Extract user ID from token payload (supports sub or id)
-    const userId = decoded.sub || decoded.id;
+    const userId = normalizeUserId(decoded.sub || decoded.id);
     if (!userId) {
       return res.status(401).json({ message: "Invalid token payload" });
     }
@@ -48,7 +57,11 @@ async function protect(req, res, next) {
     // 6️⃣ Fetch user from database
     const user = await User.findById(userId).select("-password");
     if (!user) {
-      return res.status(401).json({ message: "Not authorized, user not found" });
+      return res.status(401).json({
+        message: "Not authorized, user not found",
+        code: "USER_NOT_FOUND",
+        hint: "Your session may be outdated. Please log out and sign in again.",
+      });
     }
 
     // 7️⃣ Attach user to request (ensure both _id and id are available)
@@ -89,10 +102,10 @@ async function refreshProtect(req, res, next) {
     }
 
     // Extract user ID and fetch user
-    const userId = decoded.sub || decoded.id;
+    const userId = normalizeUserId(decoded.sub || decoded.id);
     const user = await User.findById(userId).select("-password");
     if (!user) {
-      return res.status(401).json({ message: "User not found" });
+      return res.status(401).json({ message: "User not found", code: "USER_NOT_FOUND" });
     }
 
     req.user = user;

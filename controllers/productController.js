@@ -65,7 +65,10 @@ exports.createProduct = handleAsync(async (req, res) => {
   await ensureCategories();
   const resolvedCategoryId = await resolveProductCategoryId(data.category, data.categoryTitle);
   if (!resolvedCategoryId) {
-    return res.status(400).json({ message: "Please pick a product type and try again" });
+    const label = data.categoryTitle || data.category || "selected category";
+    return res.status(400).json({
+      message: `Could not match "${label}" to a product category. Please try again or pick a different type.`,
+    });
   }
   data.category = resolvedCategoryId;
 

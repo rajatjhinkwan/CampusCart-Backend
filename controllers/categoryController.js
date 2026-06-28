@@ -51,10 +51,7 @@ exports.createCategory = handleAsync(async (req, res) => {
  * @access Public
  */
 exports.getAllCategories = handleAsync(async (req, res) => {
-  let count = await Category.countDocuments();
-  if (count === 0) {
-    await ensureCategories();
-  }
+  await ensureCategories();
 
   const filter = {};
   if (req.query.type) filter.type = req.query.type;

@@ -1,6 +1,6 @@
 /**
  * Ensures marketplace categories exist (main + subcategories).
- * Safe to run multiple times — skips when categories already present.
+ * Safe to run multiple times — creates only missing entries.
  */
 const Category = require("../models/categoryModel");
 
@@ -25,37 +25,39 @@ const SUB_CATEGORIES = {
 };
 
 async function ensureCategories() {
-  const existing = await Category.countDocuments();
-  if (existing > 0) {
-    console.log(`Categories already seeded (${existing} docs)`);
-    return existing;
-  }
-
   const mainIds = {};
+
   for (const cat of MAIN_CATEGORIES) {
-    const created = await Category.create(cat);
-    mainIds[cat.type] = created._id;
-    console.log("Created main category:", cat.title);
+    let existing = await Category.findOne({ title: cat.title, type: cat.type });
+    if (!existing) {
+      existing = await Category.create(cat);
+      console.log("Created main category:", cat.title);
+    }
+    mainIds[cat.type] = existing._id;
   }
 
   for (const [type, titles] of Object.entries(SUB_CATEGORIES)) {
     const parent = mainIds[type];
     if (!parent) continue;
+
     for (const title of titles) {
-      await Category.create({
-        title,
-        icon: "tag",
-        type,
-        desc: title,
-        color: "#64748B",
-        parent,
-      });
-      console.log("Created subcategory:", title);
+      const exists = await Category.findOne({ title, type, parent });
+      if (!exists) {
+        await Category.create({
+          title,
+          icon: "tag",
+          type,
+          desc: title,
+          color: "#64748B",
+          parent,
+        });
+        console.log("Created subcategory:", title);
+      }
     }
   }
 
   const total = await Category.countDocuments();
-  console.log(`Seeded ${total} categories`);
+  console.log(`Categories ensured (${total} docs)`);
   return total;
 }
 

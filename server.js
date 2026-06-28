@@ -98,6 +98,14 @@ const isOriginAllowed = (origin) => {
   try {
     await connectDB(); // waits for MongoDB connection
     console.log('✅ MongoDB connected');
+
+    try {
+      const { ensureCategories } = require('./scripts/ensureCategories');
+      await ensureCategories();
+      console.log('✅ Marketplace categories ensured');
+    } catch (catErr) {
+      console.warn('⚠️  Category seed failed:', catErr?.message || catErr);
+    }
     
     // Initialize Cron Jobs
     CronService.init();

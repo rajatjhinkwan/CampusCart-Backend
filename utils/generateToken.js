@@ -11,8 +11,9 @@ const getAccessSecret = () => {
 const getRefreshSecret = () => process.env.JWT_REFRESH_SECRET || getAccessSecret();
 
 const generateToken = (user = {}, options = {}) => {
+  const userId = user._id || user.id;
   const payload = {
-    sub: user._id || user.id,
+    sub: userId ? String(userId) : undefined,
     role: user.role,
     email: user.email,
   };
@@ -21,7 +22,8 @@ const generateToken = (user = {}, options = {}) => {
 };
 
 const generateRefreshToken = (user = {}, options = {}) => {
-  const payload = { id: user._id || user.id };
+  const userId = user._id || user.id;
+  const payload = { id: userId ? String(userId) : undefined, sub: userId ? String(userId) : undefined };
   const expiresIn = options.expiresIn || process.env.JWT_REFRESH_EXPIRES_IN || '7d';
   return jwt.sign(payload, getRefreshSecret(), { expiresIn });
 };
