@@ -56,7 +56,13 @@ exports.getAllCategories = handleAsync(async (req, res) => {
   const filter = {};
   if (req.query.type) filter.type = req.query.type;
 
-  const categories = await Category.find(filter).sort({ createdAt: -1 });
+  let categories = await Category.find(filter).sort({ createdAt: -1 });
+
+  if (categories.length === 0) {
+    await ensureCategories();
+    categories = await Category.find(filter).sort({ createdAt: -1 });
+  }
+
   res.json({ success: true, count: categories.length, categories });
 });
 
