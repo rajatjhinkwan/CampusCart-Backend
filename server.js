@@ -43,46 +43,52 @@ const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 validateEnv();
 
+const normalizeOrigin = (origin) => (origin || '').replace(/\/$/, '');
+
+const parseCorsOrigins = () =>
+  (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((s) => normalizeOrigin(s.trim()))
+    .filter(Boolean);
+
 const isOriginAllowed = (origin) => {
   if (!origin) return true;
-  
-  // In development, allow all localhost origins
+
+  const normalized = normalizeOrigin(origin);
+
+  // In development, allow all localhost origins (http and https)
   if (NODE_ENV === 'development') {
-    if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+    if (
+      normalized.startsWith('http://localhost:') ||
+      normalized.startsWith('https://localhost:') ||
+      normalized.startsWith('http://127.0.0.1:') ||
+      normalized.startsWith('https://127.0.0.1:')
+    ) {
       return true;
     }
   }
-  
-  // Check environment variable for allowed origins
-  const envOrigins = (process.env.CORS_ORIGINS || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
-  
-  if (envOrigins.length > 0 && envOrigins.includes(origin)) {
+
+  const envOrigins = parseCorsOrigins();
+  if (envOrigins.length > 0 && envOrigins.includes(normalized)) {
     return true;
   }
-  
-  // Default allowed origins for development and production deployments
+
   const defaultOrigins = [
-    'http://localhost:5173', 
-    'http://localhost:3000', 
-    'http://localhost:5174', 
-    'https://societyconnect1.netlify.app',
-    'https://campus-cart-frontend-kye8.vercel.app'
+    'http://localhost:5173',
+    'https://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost:5174',
+    'https://campus-cart-frontend-kye8.vercel.app',
   ];
-  if (defaultOrigins.includes(origin)) {
+  if (defaultOrigins.includes(normalized)) {
     return true;
   }
-  
-  // Match any Vercel or Netlify deployments related to campus-cart
-  if (
-    (origin.endsWith('.vercel.app') && (origin.includes('campus-cart') || origin.includes('campuscart'))) ||
-    (origin.endsWith('.netlify.app') && origin.includes('societyconnect'))
-  ) {
+
+  // Vercel preview deployments (*.vercel.app)
+  if (normalized.endsWith('.vercel.app')) {
     return true;
   }
-  
+
   return false;
 };
 

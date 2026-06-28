@@ -70,8 +70,8 @@ router.get('/me/environment', protect, handleAsync(userController.getEnvironment
 router.post('/premium/checkout', protect, handleAsync(async (req, res) => {
   // price for premium (₹199 per month example)
   const priceCents = Number(process.env.PREMIUM_PRICE_CENTS || 19900);
-  const successUrl = `${process.env.CORS_ORIGINS?.split(',')[0] || 'http://localhost:5174'}/settings?premium=success`;
-  const cancelUrl = `${process.env.CORS_ORIGINS?.split(',')[0] || 'http://localhost:5174'}/settings?premium=cancel`;
+  const successUrl = `${process.env.CORS_ORIGINS?.split(',')[0]?.trim() || process.env.FRONTEND_URL || 'http://localhost:5173'}/settings?premium=success`;
+  const cancelUrl = `${process.env.CORS_ORIGINS?.split(',')[0]?.trim() || process.env.FRONTEND_URL || 'http://localhost:5173'}/settings?premium=cancel`;
 
   if (!paymentService || !paymentService.stripe) {
     return res.status(503).json({ message: 'Payments are not configured. Please set STRIPE_SECRET_KEY in .env' });
